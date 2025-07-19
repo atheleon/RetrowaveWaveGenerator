@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Wave Generator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls for camera interaction -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        /* Custom styles for the canvas and overall layout */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            font-family: 'Inter', sans-serif;
+            background-color: #1a0f2a; /* Deep purple-blue for vaporwave feel */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end; /* Align content to the bottom */
+            min-height: 100vh;
+            color: #e2e8f0; /* Light text color */
+        }
+        #waveCanvas {
+            position: absolute; /* Position canvas absolutely to fill background */
+            top: 0;
+            left: 0;
+            width: 100vw; /* Full viewport width */
+            height: 100vh; /* Full viewport height */
+            background-color: #0c071a; /* Even darker for scene background */
+            border-radius: 0; /* Remove rounded corners for full screen */
+            box-shadow: none; /* Remove shadow */
+            display: block;
+            touch-action: none; /* Disable default touch actions for better interaction */
+        }
+        .controls-wrapper {
+            position: fixed; /* Keep controls fixed at the bottom */
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            z-index: 100; /* Ensure controls are on top of canvas */
+            padding: 5px 0; /* Further reduced padding */
+            background: rgba(43, 26, 74, 0.7); /* Semi-transparent dark purple */
+            backdrop-filter: blur(5px); /* Optional: add a blur effect */
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.3);
+        }
+        .control-panel {
+            background-color: transparent; /* Make internal panels transparent */
+            box-shadow: none; /* Remove internal shadows */
+            padding: 0 10px; /* Reduced horizontal padding */
+            margin: 0 auto; /* Center content */
+            width: 100%;
+            max-width: 1200px; /* Keep max-width for readability */
+        }
+        .control-panel h2 {
+            font-size: 1.5rem; /* Smaller heading */
+            margin-bottom: 10px; /* Adjusted margin */
+            text-align: center; /* Center the heading */
+        }
+        .slider-container {
+            position: relative; /* Needed for tooltip positioning */
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 5px; /* Further reduced margin */
+            padding: 3px; /* Further reduced padding for better hover area */
+            border-radius: 6px; /* Slightly smaller radius */
+            transition: background-color 0.2s ease;
+        }
+        .slider-container:hover {
+            background-color: rgba(255, 255, 255, 0.05); /* Subtle highlight on hover */
+        }
+        .slider-container label {
+            min-width: 90px; /* Further adjusted min-width for labels */
+            font-size: 0.85rem; /* Smaller font size for labels */
+            font-weight: 500;
+            color: #d1c4e9;
+            margin-right: 5px; /* Reduced margin */
+        }
+        .slider-container input[type="range"] {
+            flex-grow: 1;
+            margin-right: 5px; /* Reduced margin */
+            accent-color: #ff00ff;
+            height: 10px; /* Smaller slider track */
+        }
+        .slider-container span {
+            min-width: 30px; /* Further adjusted min-width for values */
+            font-size: 0.85rem; /* Smaller font size for values */
+            text-align: right;
+            font-weight: 600;
+            color: #fce4ec;
+        }
+
+        /* Tooltip styles */
+        .slider-container::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 8px); /* Adjusted position */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 6px 10px; /* Reduced padding */
+            border-radius: 5px; /* Slightly smaller radius */
+            white-space: nowrap; /* Prevent text wrapping */
+            font-size: 0.75rem; /* Smaller font size for tooltips */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+            z-index: 101; /* Above controls-wrapper */
+            pointer-events: none; /* Allow clicks through tooltip */
+            text-align: center;
+            max-width: 200px; /* Reduced max-width */
+            white-space: normal; /* Allow wrapping within max-width */
+        }
+
+        .slider-container:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Tooltip arrow */
+        .slider-container::before {
+            content: '';
+            position: absolute;
+            bottom: calc(100% + 3px); /* Adjusted position */
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 4px; /* Smaller arrow */
+            border-style: solid;
+            border-color: rgba(0, 0, 0, 0.85) transparent transparent transparent;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+            z-index: 101;
+            pointer-events: none;
+        }
+
+        .slider-container:hover::before {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Responsive adjustments for tooltips */
+        @media (max-width: 768px) {
+            .slider-container::after, .slider-container::before {
+                left: 5px; /* Align tooltips to the left on small screens */
+                transform: translateX(0);
+                right: 5px; /* Allow tooltip to expand to the right */
+                white-space: normal; /* Allow text to wrap */
+            }
+        }
+
+        /* Header styling */
+        .main-header {
+            position: absolute;
+            top: 15px; /* Adjusted top position */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50; /* Above canvas, below controls */
+            text-align: center;
+            background: rgba(26, 15, 42, 0.5); /* Semi-transparent background for header */
+            backdrop-filter: blur(3px);
+            padding: 8px 15px; /* Reduced padding */
+            border-radius: 10px; /* Slightly smaller radius */
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        .main-header h1 {
+            font-size: 2.5rem; /* Smaller header title */
+            margin-bottom: 5px; /* Reduced margin */
+        }
+        .main-header p {
+            font-size: 0.9rem; /* Smaller header subtitle */
+        }
+
+        /* Grid for controls */
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); /* Default 2 columns */
+            gap: 8px; /* Reduced gap */
+        }
+
+        @media (min-width: 768px) {
+            .control-grid {
+                grid-template-columns: repeat(3, 1fr); /* 3 columns on medium screens */
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .control-grid {
+                grid-template-columns: repeat(4, 1fr); /* 4 columns on large screens */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-header">
+        <h1 class="text-4xl font-extrabold text-white mb-2">Ocean Wave Generator</h1>
+        <p class="text-lg text-gray-300">Dive into a retro-futuristic ocean of dynamic 3D lines with more realistic effects.</p>
+    </div>
+
+    <canvas id="waveCanvas"></canvas>
+
+    <div class="controls-wrapper">
+        <div class="control-panel">
+            <h2 class="text-2xl font-semibold text-white mb-4">Wave Parameters</h2>
+
+            <div class="control-grid"> <!-- Changed to custom grid class -->
+                <div class="slider-container" data-tooltip="Controls the height of the waves.">
+                    <label for="amplitude">Amplitude:</label>
+                    <input type="range" id="amplitude" min="10" max="100" value="50">
+                    <span id="amplitudeValue">50</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Determines the distance between wave crests.">
+                    <label for="wavelength">Wavelength (px):</label>
+                    <input type="range" id="wavelength" min="50" max="500" value="200">
+                    <span id="wavelengthValue">200</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Affects how fast the waves propagate.">
+                    <label for="speed">Speed:</label>
+                    <input type="range" id="speed" min="0.1" max="100" step="0.1" value="1.5">
+                    <span id="speedValue">1.5</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Changes the number of lines used to depict the waves (higher density = more lines).">
+                    <label for="gridDensity">Grid Density:</label>
+                    <input type="range" id="gridDensity" min="10" max="50" value="25">
+                    <span id="gridDensityValue">25</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Adjusts the visual thickness of the lines.">
+                    <label for="lineWidth">Line Width:</label>
+                    <input type="range" id="lineWidth" min="1" max="5" step="0.5" value="2">
+                    <span id="lineWidthValue">2</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Adds more sine wave components with varied properties for a more complex and realistic wave pattern.">
+                    <label for="numWaves">Number of Wave Layers:</label>
+                    <input type="range" id="numWaves" min="1" max="5" value="2">
+                    <span id="numWavesValue">2</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Shifts the base color of the lines across the color spectrum (try pinks, purples, cyans!).">
+                    <label for="pointColorHue">Line Color Hue:</label>
+                    <input type="range" id="pointColorHue" min="0" max="360" value="280">
+                    <span id="pointColorHueValue">280</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Controls how quickly lines fade into the distance, enhancing the atmospheric effect.">
+                    <label for="fogDensity">Fog Density:</label>
+                    <input type="range" id="fogDensity" min="0" max="0.01" step="0.0001" value="0.002">
+                    <span id="fogDensityValue">0.002</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Sets the angle (in degrees) from which the wind blows, causing the waves to drift.">
+                    <label for="windDirection">Wind Direction (°):</label>
+                    <input type="range" id="windDirection" min="0" max="360" value="0">
+                    <span id="windDirectionValue">0</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Controls the strength of the wind, influencing the magnitude of the wave drift.">
+                    <label for="windForce">Wind Force:</label>
+                    <input type="range" id="windForce" min="0" max="50" step="1" value="0">
+                    <span id="windForceValue">0</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Reduces wave height as waves move further into the distance (Z-axis), simulating energy loss.">
+                    <label for="amplitudeDecay">Amplitude Decay:</label>
+                    <input type="range" id="amplitudeDecay" min="0" max="0.5" step="0.01" value="0.1">
+                    <span id="amplitudeDecayValue">0.1</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Adds small, random vertical fluctuations to the waves, simulating surface turbulence.">
+                    <label for="choppiness">Choppiness:</label>
+                    <input type="range" id="choppiness" min="0" max="10" step="0.1" value="0">
+                    <span id="choppinessValue">0</span>
+                </div>
+
+                <div class="slider-container" data-tooltip="Distorts the wave shape to make crests appear sharper and troughs flatter, mimicking real wave profiles.">
+                    <label for="crestSharpness">Crest Sharpness:</label>
+                    <input type="range" id="crestSharpness" min="1" max="5" step="0.1" value="1">
+                    <span id="crestSharpnessValue">1</span>
+                </div>
+
+                <!-- New Boat Position Sliders -->
+                <div class="slider-container" data-tooltip="Adjusts the boat's horizontal position (left/right).">
+                    <label for="boatPositionX">Boat X Pos:</label>
+                    <input type="range" id="boatPositionX" min="-500" max="500" value="0">
+                    <span id="boatPositionXValue">0</span>
+                </div>
+                <div class="slider-container" data-tooltip="Adjusts the boat's depth position (forward/backward).">
+                    <label for="boatPositionZ">Boat Z Pos:</label>
+                    <input type="range" id="boatPositionZ" min="-500" max="500" value="0">
+                    <span id="boatPositionZValue">0</span>
+                </div>
+                <div class="slider-container" data-tooltip="Controls the depth of the grid helper, simulating the ocean floor. Deeper values may affect wave height based on amplitude decay.">
+                    <label for="graphBottomDepth">Graph Bottom Depth:</label>
+                    <input type="range" id="graphBottomDepth" min="-200" max="200" value="0">
+                    <span id="graphBottomDepthValue">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Three.js Setup ---
+        let scene, camera, renderer, controls;
+        let lineMesh; // Mesh to hold all the wave lines
+        let geometry; // Geometry for the lines
+        let boatMesh; // Mesh for the boat
+        let gridHelper; // Reference to the grid helper
+
+        // Get canvas element
+        const canvas = document.getElementById('waveCanvas');
+
+        // --- Global Wave Parameters (controlled by UI) ---
+        // These variables will be populated by getInitialSliderValues()
+        let amplitude;
+        let wavelength;
+        let speed;
+        let gridDensity;
+        let lineWidth;
+        let numWaves;
+        let pointColorHue;
+        let fogDensity;
+        let windDirection;
+        let windForce;
+        let amplitudeDecay;
+        let choppiness;
+        let crestSharpness;
+        let boatPositionX; // New: Boat X position
+        let boatPositionZ; // New: Boat Z position
+        let graphBottomDepth; // New: Graph Bottom Depth
+
+
+        // --- Wave Configuration for Multiple Layers ---
+        let waveLayers = [];
+
+        // Function to get initial values from sliders
+        function getInitialSliderValues() {
+            amplitude = parseFloat(document.getElementById('amplitude').value);
+            wavelength = parseFloat(document.getElementById('wavelength').value);
+            speed = parseFloat(document.getElementById('speed').value);
+            gridDensity = parseInt(document.getElementById('gridDensity').value);
+            lineWidth = parseFloat(document.getElementById('lineWidth').value);
+            numWaves = parseInt(document.getElementById('numWaves').value);
+            pointColorHue = parseFloat(document.getElementById('pointColorHue').value);
+            fogDensity = parseFloat(document.getElementById('fogDensity').value);
+            windDirection = parseFloat(document.getElementById('windDirection').value);
+            windForce = parseFloat(document.getElementById('windForce').value);
+            amplitudeDecay = parseFloat(document.getElementById('amplitudeDecay').value);
+            choppiness = parseFloat(document.getElementById('choppiness').value);
+            crestSharpness = parseFloat(document.getElementById('crestSharpness').value);
+            boatPositionX = parseFloat(document.getElementById('boatPositionX').value); // Initialize boat X
+            boatPositionZ = parseFloat(document.getElementById('boatPositionZ').value); // Initialize boat Z
+            graphBottomDepth = parseFloat(document.getElementById('graphBottomDepth').value); // Initialize graph bottom depth
+        }
+
+        // Function to generate initial wave layer properties
+        function generateWaveLayers() {
+            waveLayers = [];
+            for (let i = 0; i < numWaves; i++) {
+                waveLayers.push({
+                    amplitude: amplitude * (1 - i * 0.15), // Base amplitude for layers
+                    wavelength: wavelength * (1 + i * 0.2), // Longer wavelength for deeper layers
+                    speed: speed * (1 + i * 0.1), // Slightly faster for deeper layers
+                    phaseOffset: Math.random() * Math.PI * 2 // Random phase offset for varied patterns
+                });
+            }
+        }
+
+        // --- Wave Physics Calculation ---
+        // Calculates the vertical displacement (Y-offset) for a given point
+        function calculateWaveHeight(x, z, currentTime, originalZ, currentWindowHeight) { // Added currentWindowHeight parameter
+            let totalYOffset = 0;
+
+            // Apply wind influence to effective coordinates
+            const windAngleRad = windDirection * Math.PI / 180;
+            const effectiveX = x - windForce * Math.cos(windAngleRad) * currentTime * 0.1;
+            const effectiveZ = z - windForce * Math.sin(windAngleRad) * currentTime * 0.1;
+
+            for (const wave of waveLayers) {
+                const kX = (2 * Math.PI) / wave.wavelength;
+                const kZ = (2 * Math.PI) / (wave.wavelength * 0.8);
+                const w = kX * wave.speed;
+
+                // Apply amplitude decay based on original Z position (depth)
+                // Ensure currentWindowHeight is not zero to prevent division by zero leading to NaN
+                const decayReference = currentWindowHeight > 0 ? (currentWindowHeight / 2) : 1;
+                // Adjust amplitude based on the distance from the graph bottom
+                // The further the point is from the "bottom", the less decay it experiences
+                const depthFactor = Math.max(0, (originalZ - graphBottomDepth) / decayReference); // Normalize depth relative to bottom
+                const currentAmplitude = wave.amplitude * (1 - depthFactor * amplitudeDecay);
+
+
+                // X-axis wave component using effectiveX
+                totalYOffset += currentAmplitude * Math.sin(kX * effectiveX + w * currentTime + wave.phaseOffset);
+
+                // Z-axis wave component using effectiveZ
+                totalYOffset += (currentAmplitude * 0.5) * Math.sin(kZ * effectiveZ + w * currentTime + wave.phaseOffset + Math.PI / 4);
+            }
+
+            // Add choppiness/turbulence
+            if (choppiness > 0) {
+                // Use a combination of time and position for a more organic chop
+                totalYOffset += (Math.sin(x * 0.05 + currentTime * 0.5) + Math.cos(z * 0.05 + currentTime * 0.7)) * choppiness * 0.5;
+            }
+
+            // Apply crest sharpening
+            if (crestSharpness > 1) {
+                // Normalize totalYOffset to -1 to 1 range (based on max amplitude)
+                // Ensure amplitude is not zero to prevent division by zero leading to NaN
+                const normalizedY = amplitude !== 0 ? totalYOffset / amplitude : 0;
+                // Apply a power function to sharpen crests and flatten troughs
+                // If normalizedY is positive (crest), raise to power > 1. If negative (trough), raise to power < 1 (or apply differently).
+                // A simple approach: use Math.sign and Math.pow
+                totalYOffset = Math.sign(totalYOffset) * Math.pow(Math.abs(normalizedY), crestSharpness) * amplitude;
+            }
+
+            return totalYOffset;
+        }
+
+        // --- Three.js Initialization ---
+        function init() {
+            // Get initial slider values before creating waves
+            getInitialSliderValues();
+            generateWaveLayers(); // Ensure waveLayers are populated from the start
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0c071a); // Match canvas background
+            scene.fog = new THREE.FogExp2(0x1a0f2a, fogDensity); // Vaporwave fog effect
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000); // Use window dimensions, increased far plane
+            camera.position.set(0, 250, 500); // Adjusted initial camera position for larger view
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight); // Use window dimensions
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            // OrbitControls for camera interaction
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Smooth camera movement
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 100;
+            controls.maxDistance = 1000; // Increased max distance for larger scene
+            controls.maxPolarAngle = Math.PI / 2; // Prevent camera from going below the plane
+
+            // Removed Axes Helper (as requested)
+            // const axesHelper = new THREE.AxesHelper(300);
+            // axesHelper.material.linewidth = 2;
+            // axesHelper.material.vertexColors = true;
+            // const colors = axesHelper.geometry.attributes.color.array;
+            // colors[0] = 1.0; colors[1] = 0.0; colors[2] = 1.0;
+            // colors[3] = 1.0; colors[4] = 0.0; colors[5] = 1.0;
+            // colors[6] = 0.0; colors[7] = 1.0; colors[8] = 1.0;
+            // colors[9] = 0.0; colors[10] = 1.0; colors[11] = 1.0;
+            // colors[12] = 0.0; colors[13] = 1.0; colors[14] = 0.0;
+            // colors[15] = 0.0; colors[16] = 1.0; colors[17] = 0.0;
+            // axesHelper.geometry.attributes.color.needsUpdate = true;
+            // scene.add(axesHelper);
+
+            // Add a grid helper for better spatial awareness (vaporwave style)
+            gridHelper = new THREE.GridHelper(1000, 50, 0x00ffff, 0x800080); // Increased grid size
+            gridHelper.material.opacity = 0.5;
+            gridHelper.material.transparent = true;
+            gridHelper.position.y = graphBottomDepth; // Set initial position based on slider
+            scene.add(gridHelper);
+
+            // Initial wave points generation
+            createWavePoints();
+            // Create the boat
+            createBoat();
+
+            // Handle window resizing
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; // Use window dimensions
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight); // Use window dimensions
+        }
+
+        // --- Create/Update Wave Points (now lines) ---
+        function createWavePoints() {
+            // Remove existing lines if any
+            if (lineMesh) {
+                scene.remove(lineMesh);
+                geometry.dispose(); // Dispose old geometry to free memory
+            }
+
+            // Calculate number of vertices
+            const numVertices = (gridDensity + 1) * (gridDensity + 1);
+            geometry = new THREE.BufferGeometry();
+
+            // Create Float32Array for positions and colors
+            const positions = new Float32Array(numVertices * 3);
+            const colors = new Float32Array(numVertices * 3);
+            const indices = [];
+
+            // Ensure window dimensions are numbers
+            const currentWindowWidth = parseFloat(window.innerWidth);
+            const currentWindowHeight = parseFloat(window.innerHeight);
+
+            const pointSpacingX = currentWindowWidth / gridDensity;
+            const pointSpacingZ = currentWindowHeight / gridDensity;
+
+            // Center the grid around (0,0) for better camera control
+            const offsetX = (currentWindowWidth / 2);
+            const offsetZ = (currentWindowHeight / 2);
+
+            let positionIndex = 0;
+            let colorIndex = 0;
+
+            for (let z = 0; z <= gridDensity; z++) {
+                for (let x = 0; x <= gridDensity; x++) {
+                    // X and Z coordinates in 3D space
+                    const posX = (x * pointSpacingX) - offsetX;
+                    const posZ = (z * pointSpacingZ) - offsetZ;
+                    const posY = 0; // Initial Y is 0, will be updated in animate loop
+
+                    positions[positionIndex++] = posX;
+                    positions[positionIndex++] = posY;
+                    positions[positionIndex++] = posZ;
+
+                    // Color based on depth (Z) and user-controlled hue for vaporwave effect
+                    const color = new THREE.Color();
+                    // HSL: Hue (0-360), Saturation (0-1), Lightness (0-1)
+                    // Shift hue based on user input, vary saturation/lightness based on depth
+                    const hue = (pointColorHue / 360) + (z / gridDensity) * 0.1; // Slight hue shift with depth
+                    const saturation = 0.8 + (z / gridDensity) * 0.1; // More saturated further back
+                    const lightness = 0.6 - (z / gridDensity) * 0.2; // Darker further back
+                    color.setHSL(hue % 1, saturation, lightness);
+
+                    colors[colorIndex++] = color.r;
+                    colors[colorIndex++] = color.g;
+                    colors[colorIndex++] = color.b;
+
+                    // Generate indices for lines
+                    const currentIndex = z * (gridDensity + 1) + x;
+                    if (x < gridDensity) {
+                        // Connect to the right neighbor
+                        indices.push(currentIndex, currentIndex + 1);
+                    }
+                    if (z < gridDensity) {
+                        // Connect to the neighbor below (in Z-direction)
+                        indices.push(currentIndex, currentIndex + (gridDensity + 1));
+                    }
+                }
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3)); // Use BufferAttribute for Float32Array
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setIndex(indices); // Set indices for line segments
+
+            const material = new THREE.LineBasicMaterial({
+                linewidth: lineWidth, // Set line width
+                vertexColors: true, // Use colors from geometry
+                transparent: true,
+                opacity: 0.9,
+            });
+
+            lineMesh = new THREE.LineSegments(geometry, material); // Use LineSegments for grid
+            scene.add(lineMesh);
+        }
+
+        // --- Create Boat Function ---
+        function createBoat() {
+            // Remove existing boat if any
+            if (boatMesh) {
+                scene.remove(boatMesh);
+                boatMesh.geometry.dispose();
+            }
+
+            // Define boat vertices for a simple wireframe
+            const boatShape = new THREE.BufferGeometry();
+            const boatPositions = new Float32Array([
+                // Bottom rectangle
+                -20, 0, 30,  // 0: Front-Left
+                 20, 0, 30,  // 1: Front-Right
+                 20, 0, -30, // 2: Back-Right
+                -20, 0, -30, // 3: Back-Left
+
+                // Top rectangle (smaller, for cabin/deck)
+                -10, 15, 15, // 4: Cabin-Front-Left
+                 10, 15, 15, // 5: Cabin-Front-Right
+                 10, 15, -15, // 6: Cabin-Back-Right
+                -10, 15, -15  // 7: Cabin-Back-Left
+            ]);
+
+            // Define indices to draw lines for a wireframe boat
+            const boatIndices = [
+                // Bottom hull
+                0, 1,  1, 2,  2, 3,  3, 0, // Bottom rectangle
+                0, 4,  1, 5,  2, 6,  3, 7, // Vertical connections to cabin
+                4, 5,  5, 6,  6, 7,  7, 4  // Cabin rectangle
+            ];
+
+            boatShape.setAttribute('position', new THREE.BufferAttribute(boatPositions, 3));
+            boatShape.setIndex(boatIndices);
+
+            const boatMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 }); // Neon Green
+            boatMesh = new THREE.LineSegments(boatShape, boatMaterial);
+            scene.add(boatMesh);
+
+            // Set initial boat position (relative to the center of the wave field)
+            boatMesh.position.set(boatPositionX, 0, boatPositionZ);
+        }
+
+
+        // --- Animation Loop ---
+        let time = 0; // Global time for wave animation
+
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+
+            // Update global time (convert to seconds for smoother speed control)
+            time = currentTime / 1000;
+
+            // Update point positions based on wave physics
+            const positions = geometry.attributes.position.array;
+            // Ensure window dimensions are numbers
+            const currentWindowWidth = parseFloat(window.innerWidth);
+            const currentWindowHeight = parseFloat(window.innerHeight);
+
+            const pointSpacingX = currentWindowWidth / gridDensity;
+            const pointSpacingZ = currentWindowHeight / gridDensity;
+            const offsetX = (currentWindowWidth / 2);
+            const offsetZ = (currentWindowHeight / 2);
+
+            let index = 0;
+            for (let z = 0; z <= gridDensity; z++) {
+                for (let x = 0; x <= gridDensity; x++) {
+                    const posX = (x * pointSpacingX) - offsetX;
+                    const posZ = (z * pointSpacingZ) - offsetZ; // This posZ is the original grid Z
+
+                    const waveYOffset = calculateWaveHeight(posX, posZ, time, posZ, currentWindowHeight); // Pass currentWindowHeight
+                    positions[index + 1] = waveYOffset; // Update Y coordinate
+
+                    index += 3; // Move to next point (x, y, z)
+                }
+            }
+            geometry.attributes.position.needsUpdate = true; // Tell Three.js to update vertex positions
+
+            // Update material line width in case slider changed
+            if (lineMesh.material.linewidth !== lineWidth) {
+                lineMesh.material.linewidth = lineWidth;
+                lineMesh.material.needsUpdate = true;
+            }
+
+            // Update fog density
+            if (scene.fog && scene.fog.density !== fogDensity) {
+                scene.fog.density = fogDensity;
+            }
+
+            // Update grid helper position
+            if (gridHelper) {
+                gridHelper.position.y = graphBottomDepth;
+            }
+
+            // --- Update Boat Position based on waves ---
+            if (boatMesh) {
+                // Get the current wave height at the boat's X and Z position
+                const boatCurrentWaveY = calculateWaveHeight(boatPositionX, boatPositionZ, time, boatPositionZ, currentWindowHeight); // Pass currentWindowHeight
+                boatMesh.position.y = boatCurrentWaveY;
+                boatMesh.position.x = boatPositionX; // Update from slider
+                boatMesh.position.z = boatPositionZ; // Update from slider
+            }
+
+            controls.update(); // Update camera controls
+            renderer.render(scene, camera); // Render the scene
+        }
+
+        // --- UI Event Listeners ---
+        const sliders = [
+            { id: 'amplitude', target: 'amplitudeValue', callback: (value) => { amplitude = parseFloat(value); generateWaveLayers(); } },
+            { id: 'wavelength', target: 'wavelengthValue', callback: (value) => { wavelength = parseFloat(value); generateWaveLayers(); } },
+            { id: 'speed', target: 'speedValue', callback: (value) => { speed = parseFloat(value); generateWaveLayers(); } },
+            { id: 'gridDensity', target: 'gridDensityValue', callback: (value) => { gridDensity = parseInt(value); createWavePoints(); } }, // Recreate lines on density change
+            { id: 'lineWidth', target: 'lineWidthValue', callback: (value) => { lineWidth = parseFloat(value); } }, // Update line width
+            { id: 'numWaves', target: 'numWavesValue', callback: (value) => { numWaves = parseInt(value); generateWaveLayers(); } },
+            { id: 'pointColorHue', target: 'pointColorHueValue', callback: (value) => { pointColorHue = parseFloat(value); createWavePoints(); } }, // Recreate lines to update colors
+            { id: 'fogDensity', target: 'fogDensityValue', callback: (value) => { fogDensity = parseFloat(value); if (scene.fog) scene.fog.density = fogDensity; } },
+            { id: 'windDirection', target: 'windDirectionValue', callback: (value) => { windDirection = parseFloat(value); } },
+            { id: 'windForce', target: 'windForceValue', callback: (value) => { windForce = parseFloat(value); } },
+            // New physics effects
+            { id: 'amplitudeDecay', target: 'amplitudeDecayValue', callback: (value) => { amplitudeDecay = parseFloat(value); } },
+            { id: 'choppiness', target: 'choppinessValue', callback: (value) => { choppiness = parseFloat(value); } },
+            { id: 'crestSharpness', target: 'crestSharpnessValue', callback: (value) => { crestSharpness = parseFloat(value); } },
+            { id: 'boatPositionX', target: 'boatPositionXValue', callback: (value) => { boatPositionX = parseFloat(value); } }, // Update boat X
+            { id: 'boatPositionZ', target: 'boatPositionZValue', callback: (value) => { boatPositionZ = parseFloat(value); } },  // Update boat Z
+            { id: 'graphBottomDepth', target: 'graphBottomDepthValue', callback: (value) => { graphBottomDepth = parseFloat(value); } } // Update graph bottom depth
+        ];
+
+        sliders.forEach(s => {
+            const slider = document.getElementById(s.id);
+            const valueDisplay = document.getElementById(s.target);
+            slider.addEventListener('input', (event) => {
+                valueDisplay.textContent = event.target.value;
+                // Update global variable directly
+                // Note: s.id directly corresponds to the global variable name
+                window[s.id] = parseFloat(event.target.value);
+                if (s.callback) {
+                    s.callback(event.target.value);
+                }
+            });
+            // Set initial display value
+            valueDisplay.textContent = slider.value;
+        });
+
+
+        // Initialize and start animation
+        window.onload = function() {
+            init(); // Initialize Three.js scene
+            animate(performance.now()); // Start the animation loop
+        };
+
+    </script>
+</body>
+</html>
